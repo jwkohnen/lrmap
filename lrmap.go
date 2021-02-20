@@ -2,7 +2,6 @@ package lrmap
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,12 +86,6 @@ func (m *LRMap) NewReadHandler() *ReadHandler {
 	rh := &ReadHandler{lrm: m}
 
 	m.readHandlers[rh] = struct{}{}
-
-	// sharp-edged finalizer: https://crawshaw.io/blog/sharp-edged-finalizers
-	_, file, line, _ := runtime.Caller(1)
-	runtime.SetFinalizer(rh, func(*ReadHandler) {
-		panic(fmt.Errorf("reader illegal state: must call Close() (created at %s:%d)", file, line))
-	})
 
 	return rh
 }
@@ -214,6 +207,5 @@ func (r *ReadHandler) Close() {
 	}
 
 	delete(r.lrm.readHandlers, r)
-	runtime.SetFinalizer(r, nil)
 	r.closed = true
 }
