@@ -1,4 +1,4 @@
-# Left-Right Map
+# Left-Right Map in Go
 
 This is experimental code and work in progress.
 
