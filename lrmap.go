@@ -20,10 +20,10 @@ type (
 		readHandlers map[*ReadHandler]struct{}
 	}
 
-	mapT map[Key]Value
-
 	Key   int
 	Value int
+
+	mapT map[Key]Value
 )
 
 func New() *LRMap {
@@ -179,6 +179,10 @@ type ReadHandler struct {
 }
 
 func (r *ReadHandler) Enter() {
+	if r.lrm == nil {
+		panic("reader illegal state: must create with New()")
+	}
+
 	atomic.AddUint64(&r.epoch, 1)
 	r.live = r.lrm.getMapAtomic()
 }
