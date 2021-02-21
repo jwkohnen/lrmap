@@ -118,8 +118,7 @@ func (m *LRMap) swap() {
 func (m *LRMap) waitForReaders() {
 	readers := make(map[*ReadHandler]uint64)
 	for rh := range m.readHandlers {
-		epoch := atomic.LoadUint64(&(rh.epoch))
-		if epoch%2 == 1 {
+		if epoch := atomic.LoadUint64(&(rh.epoch)); epoch%2 == 1 {
 			readers[rh] = epoch
 		}
 	}
@@ -143,7 +142,6 @@ func (m *LRMap) waitForReaders() {
 		if delay > 5*time.Second {
 			delay = 5 * time.Second
 		}
-
 	}
 }
 
@@ -176,11 +174,19 @@ func (r *ReadHandler) Enter() {
 		panic("reader illegal state: must create with New()")
 	}
 
+	if r.epoch%2 == 1 {
+		panic("reader illegal state: must not Enter() twice")
+	}
+
 	atomic.AddUint64(&r.epoch, 1)
 	r.live = r.lrm.getMapAtomic()
 }
 
 func (r *ReadHandler) Leave() {
+	if r.epoch%2 == 0 {
+		panic("reader illegal state: must not Leave() twice")
+	}
+
 	atomic.AddUint64(&r.epoch, 1)
 }
 
