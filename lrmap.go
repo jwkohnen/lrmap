@@ -55,6 +55,21 @@ func (m *LRMap) Delete(k Key) {
 	m.opLog = append(m.opLog, op{t: opDelete, k: k})
 }
 
+func (m *LRMap) Get(k Key) Value {
+	v, _ := m.GetOK(k)
+
+	return v
+}
+
+func (m *LRMap) GetOK(k Key) (Value, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	v, ok := (*m.writeMap)[k]
+
+	return v, ok
+}
+
 func (m *LRMap) Flush() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
