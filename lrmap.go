@@ -12,11 +12,11 @@ import (
 type (
 	LRMap struct {
 		mu              sync.Mutex
-		left            mapT
-		right           mapT
+		left            arena
+		right           arena
 		readMap         unsafe.Pointer
-		writeMap        *mapT
-		opLog           []op
+		writeMap        *arena
+		redoLog         []operation
 		readHandlers    map[*readHandlerInner]struct{}
 		readHandlerPool sync.Pool
 	}
@@ -24,14 +24,14 @@ type (
 	Key   int
 	Value int
 
-	mapT map[Key]Value
+	arena map[Key]Value
 )
 
 func New() *LRMap {
 	// nolint:exhaustivestruct
 	m := &LRMap{
-		left:         make(map[Key]Value),
-		right:        make(map[Key]Value),
+		left:         make(arena),
+		right:        make(arena),
 		readHandlers: make(map[*readHandlerInner]struct{}),
 	}
 
@@ -48,7 +48,7 @@ func (m *LRMap) Set(k Key, v Value) {
 
 	(*(m.writeMap))[k] = v
 
-	m.opLog = append(m.opLog, op{t: opSet, k: k, v: &v})
+	m.redoLog = append(m.redoLog, operation{typ: opSet, key: k, value: &v})
 }
 
 func (m *LRMap) Delete(k Key) {
@@ -58,7 +58,7 @@ func (m *LRMap) Delete(k Key) {
 	delete(*(m.writeMap), k)
 
 	// nolint:exhaustivestruct
-	m.opLog = append(m.opLog, op{t: opDelete, k: k})
+	m.redoLog = append(m.redoLog, operation{typ: opDelete, key: k})
 }
 
 func (m *LRMap) Get(k Key) Value {
@@ -84,21 +84,21 @@ func (m *LRMap) Flush() {
 
 	m.waitForReaders()
 
-	// redo all operations from the op log into the new write map (old read map) to sync up.
-	for _, o := range m.opLog {
-		switch o.t {
+	// redo all operations from the redo log into the new write map (old read map) to sync up.
+	for _, op := range m.redoLog {
+		switch op.typ {
 		case opSet:
-			(*(m.writeMap))[o.k] = *(o.v)
+			(*(m.writeMap))[op.key] = *(op.value)
 		case opDelete:
-			delete(*(m.writeMap), o.k)
+			delete(*(m.writeMap), op.key)
 		default:
 			// nolint:goerr113
-			panic(fmt.Errorf("op(%d) not implemented", o.t))
+			panic(fmt.Errorf("operation(%d) not implemented", op.typ))
 		}
 	}
 
-	// drop the op log completely and let the GC remove all references to stale keys and values
-	m.opLog = nil
+	// drop the redo log completely and let the GC remove all references to stale keys and values
+	m.redoLog = nil
 }
 
 func (m *LRMap) NewReadHandler() *ReadHandler {
@@ -139,28 +139,28 @@ func (m *LRMap) newReadHandler() *ReadHandler {
 
 func (m *LRMap) swap() {
 	var (
-		r = (*mapT)(m.readMap)
-		w *mapT
+		read  = (*arena)(m.readMap)
+		write *arena
 	)
 
-	switch r {
+	switch read {
 	case nil:
 		// initial case: start with left map as reader, right map as writer
-		r = &(m.left)
-		w = &(m.right)
+		read = &(m.left)
+		write = &(m.right)
 	case &(m.left):
-		r = &(m.right)
-		w = &(m.left)
+		read = &(m.right)
+		write = &(m.left)
 	case &(m.right):
-		r = &(m.left)
-		w = &(m.right)
+		read = &(m.left)
+		write = &(m.right)
 	default:
 		// nolint:goerr113
-		panic(fmt.Errorf("illegal pointer: %v", r))
+		panic(fmt.Errorf("illegal pointer: %v", read))
 	}
 
-	atomic.StorePointer(&(m.readMap), unsafe.Pointer(r))
-	m.writeMap = w
+	atomic.StorePointer(&(m.readMap), unsafe.Pointer(read))
+	m.writeMap = write
 }
 
 func (m *LRMap) waitForReaders() {
@@ -196,8 +196,8 @@ func (m *LRMap) waitForReaders() {
 	}
 }
 
-func (m *LRMap) getMapAtomic() mapT {
-	return *(*mapT)(atomic.LoadPointer(&(m.readMap)))
+func (m *LRMap) getArenaAtomic() arena {
+	return *(*arena)(atomic.LoadPointer(&(m.readMap)))
 }
 
 type opType int8
@@ -207,10 +207,10 @@ const (
 	opDelete
 )
 
-type op struct {
-	t opType
-	k Key
-	v *Value
+type operation struct {
+	typ   opType
+	key   Key
+	value *Value
 }
 
 type ReadHandler struct {
@@ -272,7 +272,7 @@ func (rh *ReadHandler) assertReady() {
 
 type readHandlerInner struct {
 	lrm   *LRMap
-	live  mapT
+	live  arena
 	epoch uint64
 }
 
@@ -282,7 +282,7 @@ func (r *readHandlerInner) enter() {
 	}
 
 	atomic.AddUint64(&r.epoch, 1)
-	r.live = r.lrm.getMapAtomic()
+	r.live = r.lrm.getArenaAtomic()
 }
 
 func (r *readHandlerInner) leave() {

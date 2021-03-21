@@ -7,7 +7,7 @@ import (
 	"github.com/jwkohnen/lrmap"
 )
 
-func ExampleIterate() {
+func ExampleReadHandler_Iterate() {
 	m := lrmap.New()
 
 	for i := 0; i < 10; i++ {
