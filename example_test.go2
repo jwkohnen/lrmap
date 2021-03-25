@@ -1,14 +1,12 @@
-package lrmap_test
+package lrmap
 
 import (
 	"fmt"
 	"sort"
-
-	"github.com/jwkohnen/lrmap2"
 )
 
 func ExampleReadHandler_Iterate() {
-	m := lrmap2.New[int, int]()
+	m := New[int, int]()
 
 	for i := 0; i < 10; i++ {
 		m.Set(k, v)
