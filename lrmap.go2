@@ -39,38 +39,38 @@ func New[K comparable, V any]() *LRMap[K, V] {
 	return m
 }
 
-func (m *LRMap[K, V]) Set(k K, v V) {
+func (m *LRMap[K, V]) Set(key K, value V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	(*(m.writeMap))[k] = v
+	(*(m.writeMap))[key] = value
 
-	m.redoLog = append(m.redoLog, operation[K, V]{typ: opSet, key: k, value: &v})
+	m.redoLog = append(m.redoLog, operation[K, V]{typ: opSet, key: key, value: &value})
 }
 
-func (m *LRMap[K, V]) Delete(k K) {
+func (m *LRMap[K, V]) Delete(key K) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(*(m.writeMap), k)
+	delete(*(m.writeMap), key)
 
 	// nolint:exhaustivestruct
-	m.redoLog = append(m.redoLog, operation[K, V]{typ: opDelete, key: k})
+	m.redoLog = append(m.redoLog, operation[K, V]{typ: opDelete, key: key})
 }
 
-func (m *LRMap[K, V]) Get(k K) V {
-	v, _ := m.GetOK(k)
+func (m *LRMap[K, V]) Get(key K) V {
+	value, _ := m.GetOK(key)
 
-	return v
+	return value
 }
 
-func (m *LRMap[K, V]) GetOK(k K) (V, bool) {
+func (m *LRMap[K, V]) GetOK(key K) (V, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	v, ok := (*m.writeMap)[k]
+	value, ok := (*m.writeMap)[key]
 
-	return v, ok
+	return value, ok
 }
 
 func (m *LRMap[K, V]) Flush() {
@@ -217,19 +217,19 @@ type ReadHandler[K comparable, V any] struct {
 
 func (rh *ReadHandler[K, V]) Enter()                    { rh.assertReady(); rh.inner.enter() }
 func (rh *ReadHandler[K, V]) Leave()                    { rh.assertReady(); rh.inner.leave() }
-func (rh *ReadHandler[K, V]) Get(k K) V                 { rh.assertReady(); return rh.inner.get(k) }
-func (rh *ReadHandler[K, V]) GetOK(k K) (V, bool)       { rh.assertReady(); return rh.inner.getOK(k) }
+func (rh *ReadHandler[K, V]) Get(key K) V               { rh.assertReady(); return rh.inner.get(key) }
+func (rh *ReadHandler[K, V]) GetOK(key K) (V, bool)     { rh.assertReady(); return rh.inner.getOK(key) }
 func (rh *ReadHandler[K, V]) Len() int                  { rh.assertReady(); return rh.inner.len() }
 
-func (rh *ReadHandler[K, V]) Iterate(fn func(k K, v V) bool) {
+func (rh *ReadHandler[K, V]) Iterate(fn func(_ K, _ V) bool) {
 	rh.assertReady()
 
 	if !rh.inner.entered() {
 		panic("reader illegal state: must call Enter() before iterating")
 	}
 
-	for k, v := range rh.inner.live {
-		if ok := fn(k, v); !ok {
+	for key, value := range rh.inner.live {
+		if ok := fn(key, value); !ok {
 			return
 		}
 	}
@@ -290,20 +290,20 @@ func (r *readHandlerInner[K, V]) leave() {
 	atomic.AddUint64(&r.epoch, 1)
 }
 
-func (r *readHandlerInner[K, V]) get(k K) V {
-	v, _ := r.getOK(k)
+func (r *readHandlerInner[K, V]) get(key K) V {
+	value, _ := r.getOK(key)
 
-	return v
+	return value
 }
 
-func (r *readHandlerInner[K, V]) getOK(k K) (V, bool) {
+func (r *readHandlerInner[K, V]) getOK(key K) (V, bool) {
 	if !r.entered() {
 		panic("reader illegal state: must Enter() before operating on data")
 	}
 
-	v, ok := r.live[k]
+	value, ok := r.live[key]
 
-	return v, ok
+	return value, ok
 }
 
 func (r *readHandlerInner[K, V]) len() int {
