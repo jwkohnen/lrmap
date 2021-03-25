@@ -9,6 +9,7 @@ func ExampleReadHandler_Iterate() {
 	m := New[int, int]()
 
 	for i := 0; i < 10; i++ {
+		k, v := i, i
 		m.Set(k, v)
 	}
 
