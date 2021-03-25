@@ -6,13 +6,13 @@ import (
 )
 
 func TestHundred(t *testing.T) {
-	lrm := New()
+	lrm := New[int, int]()
 
 	rh := lrm.NewReadHandler()
 	defer rh.Close()
 
 	for i := 1; i < 100; i += 2 {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		lrm.Set(k, v)
 	}
@@ -20,7 +20,7 @@ func TestHundred(t *testing.T) {
 	lrm.Flush()
 
 	for i := 1; i < 100; i += 2 {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		rh.Enter()
 		if _v := rh.Get(k); _v != v {
@@ -31,7 +31,7 @@ func TestHundred(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i += 2 {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 		lrm.Set(k, v)
 	}
 
@@ -39,7 +39,7 @@ func TestHundred(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		rh.Enter()
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		if _v := rh.Get(k); _v != v {
 			t.Errorf("Get(%d) want %d, got %d", k, v, _v)
@@ -51,7 +51,7 @@ func TestHundred(t *testing.T) {
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		if _v := rh.Get(k); _v != v {
 			t.Errorf("Get(%d) want %d, got %d", k, v, _v)
@@ -60,7 +60,7 @@ func TestHundred(t *testing.T) {
 	rh.Leave()
 
 	for i := 0; i < 100; i += 2 {
-		k := Key(i)
+		k := i
 		lrm.Delete(k)
 	}
 
@@ -68,7 +68,7 @@ func TestHundred(t *testing.T) {
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		_v, ok := rh.GetOK(k)
 		if i%2 == 0 {
@@ -87,7 +87,7 @@ func TestHundred(t *testing.T) {
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {
-		k, v := Key(i), Value(i)
+		k, v := i, i
 
 		_v, ok := rh.GetOK(k)
 		if i%2 == 0 {

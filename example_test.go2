@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/jwkohnen/lrmap"
+	"github.com/jwkohnen/lrmap2"
 )
 
 func ExampleReadHandler_Iterate() {
-	m := lrmap.New()
+	m := lrmap2.New[int, int]()
 
 	for i := 0; i < 10; i++ {
-		k, v := lrmap.Key(i), lrmap.Value(i)
 		m.Set(k, v)
 	}
 
@@ -23,8 +22,8 @@ func ExampleReadHandler_Iterate() {
 
 	var values []int
 
-	rh.Iterate(func(_ lrmap.Key, v lrmap.Value) bool {
-		values = append(values, int(v))
+	rh.Iterate(func(_ int, v int) bool {
+		values = append(values, v)
 
 		return true
 	})

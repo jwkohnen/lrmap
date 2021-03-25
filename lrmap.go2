@@ -10,29 +10,26 @@ import (
 )
 
 type (
-	LRMap struct {
+	LRMap[K comparable, V any] struct {
 		mu              sync.Mutex
-		left            arena
-		right           arena
+		left            arena[K, V]
+		right           arena[K, V]
 		readMap         unsafe.Pointer
-		writeMap        *arena
-		redoLog         []operation
-		readHandlers    map[*readHandlerInner]struct{}
+		writeMap        *arena[K, V]
+		redoLog         []operation[K, V]
+		readHandlers    map[*readHandlerInner[K, V]]struct{}
 		readHandlerPool sync.Pool
 	}
 
-	Key   int
-	Value int
-
-	arena map[Key]Value
+	arena[K comparable, V any] map[K]V
 )
 
-func New() *LRMap {
+func New[K comparable, V any]() *LRMap[K, V] {
 	// nolint:exhaustivestruct
-	m := &LRMap{
-		left:         make(arena),
-		right:        make(arena),
-		readHandlers: make(map[*readHandlerInner]struct{}),
+	m := &LRMap[K, V]{
+		left:         make(arena[K, V]),
+		right:        make(arena[K, V]),
+		readHandlers: make(map[*readHandlerInner[K, V]]struct{}),
 	}
 
 	m.readHandlerPool.New = func() interface{} { return m.newReadHandler() }
@@ -42,32 +39,32 @@ func New() *LRMap {
 	return m
 }
 
-func (m *LRMap) Set(k Key, v Value) {
+func (m *LRMap[K, V]) Set(k K, v V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	(*(m.writeMap))[k] = v
 
-	m.redoLog = append(m.redoLog, operation{typ: opSet, key: k, value: &v})
+	m.redoLog = append(m.redoLog, operation[K, V]{typ: opSet, key: k, value: &v})
 }
 
-func (m *LRMap) Delete(k Key) {
+func (m *LRMap[K, V]) Delete(k K) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	delete(*(m.writeMap), k)
 
 	// nolint:exhaustivestruct
-	m.redoLog = append(m.redoLog, operation{typ: opDelete, key: k})
+	m.redoLog = append(m.redoLog, operation[K, V]{typ: opDelete, key: k})
 }
 
-func (m *LRMap) Get(k Key) Value {
+func (m *LRMap[K, V]) Get(k K) V {
 	v, _ := m.GetOK(k)
 
 	return v
 }
 
-func (m *LRMap) GetOK(k Key) (Value, bool) {
+func (m *LRMap[K, V]) GetOK(k K) (V, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -76,7 +73,7 @@ func (m *LRMap) GetOK(k Key) (Value, bool) {
 	return v, ok
 }
 
-func (m *LRMap) Flush() {
+func (m *LRMap[K, V]) Flush() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -101,14 +98,14 @@ func (m *LRMap) Flush() {
 	m.redoLog = nil
 }
 
-func (m *LRMap) NewReadHandler() *ReadHandler {
-	rh := m.readHandlerPool.Get().(*ReadHandler)
+func (m *LRMap[K, V]) NewReadHandler() *ReadHandler[K, V] {
+	rh := m.readHandlerPool.Get().(*ReadHandler[K, V])
 	rh.ready = true
 
 	return rh
 }
 
-func (m *LRMap) newReadHandler() *ReadHandler {
+func (m *LRMap[K, V]) newReadHandler() *ReadHandler[K, V] {
 	// Wrap the actual (inner) readHandler in an outer shim and return that shim to the
 	// user and only keep a "weak reference" to the inner readHandler, but not the shim.
 	// If the user drops any references to the outer shim, (eventually) the runtime runs
@@ -122,14 +119,14 @@ func (m *LRMap) newReadHandler() *ReadHandler {
 	// thus leaking resources through the readHandlers list.
 
 	// nolint:exhaustivestruct
-	inner := &readHandlerInner{lrm: m}
+	inner := &readHandlerInner[K, V]{lrm: m}
 
 	m.mu.Lock()
 	m.readHandlers[inner] = struct{}{}
 	m.mu.Unlock()
 
-	outer := &ReadHandler{inner: inner}
-	runtime.SetFinalizer(outer, func(rh *ReadHandler) {
+	outer := &ReadHandler[K, V]{inner: inner}
+	runtime.SetFinalizer(outer, func(rh *ReadHandler[K, V]) {
 		rh.ready = false
 		rh.inner.close()
 	})
@@ -137,10 +134,10 @@ func (m *LRMap) newReadHandler() *ReadHandler {
 	return outer
 }
 
-func (m *LRMap) swap() {
+func (m *LRMap[K, V]) swap() {
 	var (
-		read  = (*arena)(m.readMap)
-		write *arena
+		read  = (*arena[K, V])(m.readMap)
+		write *arena[K, V]
 	)
 
 	switch read {
@@ -163,8 +160,8 @@ func (m *LRMap) swap() {
 	m.writeMap = write
 }
 
-func (m *LRMap) waitForReaders() {
-	readers := make(map[*readHandlerInner]uint64)
+func (m *LRMap[K, V]) waitForReaders() {
+	readers := make(map[*readHandlerInner[K, V]]uint64)
 
 	for rh := range m.readHandlers {
 		if epoch := atomic.LoadUint64(&(rh.epoch)); epoch%2 == 1 {
@@ -196,8 +193,8 @@ func (m *LRMap) waitForReaders() {
 	}
 }
 
-func (m *LRMap) getArenaAtomic() arena {
-	return *(*arena)(atomic.LoadPointer(&(m.readMap)))
+func (m *LRMap[K, V]) getArenaAtomic() arena[K, V] {
+	return *(*arena[K, V])(atomic.LoadPointer(&(m.readMap)))
 }
 
 type opType int8
@@ -207,24 +204,24 @@ const (
 	opDelete
 )
 
-type operation struct {
+type operation[K comparable, V any] struct {
 	typ   opType
-	key   Key
-	value *Value
+	key   K
+	value *V
 }
 
-type ReadHandler struct {
-	inner *readHandlerInner
+type ReadHandler[K comparable, V any] struct {
+	inner *readHandlerInner[K, V]
 	ready bool
 }
 
-func (rh *ReadHandler) Enter()                    { rh.assertReady(); rh.inner.enter() }
-func (rh *ReadHandler) Leave()                    { rh.assertReady(); rh.inner.leave() }
-func (rh *ReadHandler) Get(k Key) Value           { rh.assertReady(); return rh.inner.get(k) }
-func (rh *ReadHandler) GetOK(k Key) (Value, bool) { rh.assertReady(); return rh.inner.getOK(k) }
-func (rh *ReadHandler) Len() int                  { rh.assertReady(); return rh.inner.len() }
+func (rh *ReadHandler[K, V]) Enter()                    { rh.assertReady(); rh.inner.enter() }
+func (rh *ReadHandler[K, V]) Leave()                    { rh.assertReady(); rh.inner.leave() }
+func (rh *ReadHandler[K, V]) Get(k K) V                 { rh.assertReady(); return rh.inner.get(k) }
+func (rh *ReadHandler[K, V]) GetOK(k K) (V, bool)       { rh.assertReady(); return rh.inner.getOK(k) }
+func (rh *ReadHandler[K, V]) Len() int                  { rh.assertReady(); return rh.inner.len() }
 
-func (rh *ReadHandler) Iterate(fn func(k Key, v Value) bool) {
+func (rh *ReadHandler[K, V]) Iterate(fn func(k K, v V) bool) {
 	rh.assertReady()
 
 	if !rh.inner.entered() {
@@ -238,7 +235,7 @@ func (rh *ReadHandler) Iterate(fn func(k Key, v Value) bool) {
 	}
 }
 
-func (rh *ReadHandler) Close() {
+func (rh *ReadHandler[K, V]) Close() {
 	rh.assertReady()
 
 	runtime.SetFinalizer(rh, nil)
@@ -246,7 +243,7 @@ func (rh *ReadHandler) Close() {
 	rh.inner.close()
 }
 
-func (rh *ReadHandler) Recycle() {
+func (rh *ReadHandler[K, V]) Recycle() {
 	if !rh.ready {
 		panic("illegal reader state: must not recycle twice")
 	}
@@ -260,7 +257,7 @@ func (rh *ReadHandler) Recycle() {
 	rh.inner.lrm.readHandlerPool.Put(rh)
 }
 
-func (rh *ReadHandler) assertReady() {
+func (rh *ReadHandler[K, V]) assertReady() {
 	if rh.inner == nil {
 		panic("reader illegal state: must create with NewReadHandler()") // TODO
 	}
@@ -270,13 +267,13 @@ func (rh *ReadHandler) assertReady() {
 	}
 }
 
-type readHandlerInner struct {
-	lrm   *LRMap
-	live  arena
+type readHandlerInner[K comparable, V any] struct {
+	lrm   *LRMap[K, V]
+	live  arena[K, V]
 	epoch uint64
 }
 
-func (r *readHandlerInner) enter() {
+func (r *readHandlerInner[K, V]) enter() {
 	if r.entered() {
 		panic("reader illegal state: must not Enter() twice")
 	}
@@ -285,7 +282,7 @@ func (r *readHandlerInner) enter() {
 	r.live = r.lrm.getArenaAtomic()
 }
 
-func (r *readHandlerInner) leave() {
+func (r *readHandlerInner[K, V]) leave() {
 	if !r.entered() {
 		panic("reader illegal state: must not Leave() twice")
 	}
@@ -293,13 +290,13 @@ func (r *readHandlerInner) leave() {
 	atomic.AddUint64(&r.epoch, 1)
 }
 
-func (r *readHandlerInner) get(k Key) Value {
+func (r *readHandlerInner[K, V]) get(k K) V {
 	v, _ := r.getOK(k)
 
 	return v
 }
 
-func (r *readHandlerInner) getOK(k Key) (Value, bool) {
+func (r *readHandlerInner[K, V]) getOK(k K) (V, bool) {
 	if !r.entered() {
 		panic("reader illegal state: must Enter() before operating on data")
 	}
@@ -309,7 +306,7 @@ func (r *readHandlerInner) getOK(k Key) (Value, bool) {
 	return v, ok
 }
 
-func (r *readHandlerInner) len() int {
+func (r *readHandlerInner[K, V]) len() int {
 	if !r.entered() {
 		panic("reader illegal state: must Enter() before operation on data")
 	}
@@ -317,13 +314,13 @@ func (r *readHandlerInner) len() int {
 	return len(r.live)
 }
 
-func (r *readHandlerInner) close() {
+func (r *readHandlerInner[K, V]) close() {
 	r.lrm.mu.Lock()
 	defer r.lrm.mu.Unlock()
 
 	delete(r.lrm.readHandlers, r)
 }
 
-func (r *readHandlerInner) entered() bool {
+func (r *readHandlerInner[K, V]) entered() bool {
 	return r.epoch%2 == 1
 }
