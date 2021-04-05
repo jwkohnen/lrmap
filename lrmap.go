@@ -224,7 +224,7 @@ func (rh *ReadHandler) Get(key Key) Value           { rh.assertReady(); return r
 func (rh *ReadHandler) GetOK(key Key) (Value, bool) { rh.assertReady(); return rh.inner.getOK(key) }
 func (rh *ReadHandler) Len() int                    { rh.assertReady(); return rh.inner.len() }
 
-func (rh *ReadHandler) Iterate(fn func(k Key, v Value) bool) {
+func (rh *ReadHandler) Iterate(fn func(_ Key, _ Value) bool) {
 	rh.assertReady()
 
 	if !rh.inner.entered() {
