@@ -1,3 +1,3 @@
-module github.com/jwkohnen/lrmap2
+module github.com/jwkohnen/lrmap
 
 go 1.16
