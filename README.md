@@ -17,6 +17,11 @@ Oblivious Reads" [blog post](https://concurrencyfreaks.blogspot.com/2013/12/left
 [preprint paper (pdf)](https://iweb.dl.sourceforge.net/project/ccfreaks/papers/LeftRight/leftright-extended.pdf)
 (Warning: Sourceforge).
 
+## Go type paramters draft, a.k.a. Go2Go
+
+In branch go2go is a modifiaction that uses the experimental go2go compiler.
+To test the code run compile the Go sources from the `dev.go2go` branch and run
+`go tool go2go test`.
 
 ## What is Left-Right?
 
