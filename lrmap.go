@@ -144,11 +144,7 @@ func (m *LRMap) swap() {
 	)
 
 	switch read {
-	case nil:
-		// initial case: start with left map as reader, right map as writer
-		read = &(m.left)
-		write = &(m.right)
-	case &(m.left):
+	case nil /* initial case */, &(m.left):
 		read = &(m.right)
 		write = &(m.left)
 	case &(m.right):
@@ -262,7 +258,7 @@ func (rh *ReadHandler) Recycle() {
 
 func (rh *ReadHandler) assertReady() {
 	if rh.inner == nil {
-		panic("reader illegal state: must create with NewReadHandler()") // TODO
+		panic("reader illegal state: must create with NewReadHandler()")
 	}
 
 	if !rh.ready {
