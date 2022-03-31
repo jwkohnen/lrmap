@@ -5,7 +5,13 @@ import (
 	"testing"
 )
 
-func TestHundred(t *testing.T) {
+func TestHundred(t *testing.T) { testHundred(t) }
+func BenchmarkTestHundred(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		testHundred(b)
+	}
+}
+func testHundred(t testing.TB) {
 	lrm := New[int, int]()
 
 	rh := lrm.NewReadHandler()
