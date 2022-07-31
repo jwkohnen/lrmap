@@ -13,7 +13,7 @@ func ExampleReadHandler_Iterate() {
 		m.Set(k, v)
 	}
 
-	m.Flush()
+	m.Commit()
 
 	rh := m.NewReadHandler()
 	rh.Enter()

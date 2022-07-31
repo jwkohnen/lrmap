@@ -23,7 +23,7 @@ func testHundred(t testing.TB) {
 		lrm.Set(k, v)
 	}
 
-	lrm.Flush()
+	lrm.Commit()
 
 	for i := 1; i < 100; i += 2 {
 		k, v := i, i
@@ -41,7 +41,7 @@ func testHundred(t testing.TB) {
 		lrm.Set(k, v)
 	}
 
-	lrm.Flush()
+	lrm.Commit()
 
 	for i := 0; i < 100; i++ {
 		rh.Enter()
@@ -53,7 +53,7 @@ func testHundred(t testing.TB) {
 		rh.Leave()
 	}
 
-	lrm.Flush()
+	lrm.Commit()
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {
@@ -70,7 +70,7 @@ func testHundred(t testing.TB) {
 		lrm.Delete(k)
 	}
 
-	lrm.Flush()
+	lrm.Commit()
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {
@@ -89,7 +89,7 @@ func testHundred(t testing.TB) {
 	}
 	rh.Leave()
 
-	lrm.Flush()
+	lrm.Commit()
 
 	rh.Enter()
 	for i := 0; i < 100; i++ {

@@ -73,7 +73,7 @@ func (m *LRMap[K, V]) GetOK(key K) (V, bool) {
 	return value, ok
 }
 
-func (m *LRMap[K, V]) Flush() {
+func (m *LRMap[K, V]) Commit() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -119,7 +119,7 @@ func (m *LRMap[K, V]) newReadHandler() *ReadHandler[K, V] {
 	// thus leaking resources through the readHandlers list.
 
 	// nolint:exhaustivestruct
-	inner := &readHandlerInner[K, V]{lrm: m}
+	inner := &readHandlerInner[K, V]{lrmap: m}
 
 	m.mu.Lock()
 	m.readHandlers[inner] = struct{}{}
@@ -211,11 +211,11 @@ type ReadHandler[K comparable, V any] struct {
 	ready bool
 }
 
-func (rh *ReadHandler[K, V]) Enter()                    { rh.assertReady(); rh.inner.enter() }
-func (rh *ReadHandler[K, V]) Leave()                    { rh.assertReady(); rh.inner.leave() }
-func (rh *ReadHandler[K, V]) Get(key K) V               { rh.assertReady(); return rh.inner.get(key) }
-func (rh *ReadHandler[K, V]) GetOK(key K) (V, bool)     { rh.assertReady(); return rh.inner.getOK(key) }
-func (rh *ReadHandler[K, V]) Len() int                  { rh.assertReady(); return rh.inner.len() }
+func (rh *ReadHandler[K, V]) Enter()                { rh.assertReady(); rh.inner.enter() }
+func (rh *ReadHandler[K, V]) Leave()                { rh.assertReady(); rh.inner.leave() }
+func (rh *ReadHandler[K, V]) Get(key K) V           { rh.assertReady(); return rh.inner.get(key) }
+func (rh *ReadHandler[K, V]) GetOK(key K) (V, bool) { rh.assertReady(); return rh.inner.getOK(key) }
+func (rh *ReadHandler[K, V]) Len() int              { rh.assertReady(); return rh.inner.len() }
 
 func (rh *ReadHandler[K, V]) Iterate(fn func(_ K, _ V) bool) {
 	rh.assertReady()
@@ -250,7 +250,7 @@ func (rh *ReadHandler[K, V]) Recycle() {
 
 	rh.ready = false
 
-	rh.inner.lrm.readHandlerPool.Put(rh)
+	rh.inner.lrmap.readHandlerPool.Put(rh)
 }
 
 func (rh *ReadHandler[K, V]) assertReady() {
@@ -264,7 +264,7 @@ func (rh *ReadHandler[K, V]) assertReady() {
 }
 
 type readHandlerInner[K comparable, V any] struct {
-	lrm   *LRMap[K, V]
+	lrmap *LRMap[K, V]
 	live  arena[K, V]
 	epoch uint64
 }
@@ -275,7 +275,7 @@ func (r *readHandlerInner[K, V]) enter() {
 	}
 
 	atomic.AddUint64(&r.epoch, 1)
-	r.live = r.lrm.getArenaAtomic()
+	r.live = r.lrmap.getArenaAtomic()
 }
 
 func (r *readHandlerInner[K, V]) leave() {
@@ -311,10 +311,10 @@ func (r *readHandlerInner[K, V]) len() int {
 }
 
 func (r *readHandlerInner[K, V]) close() {
-	r.lrm.mu.Lock()
-	defer r.lrm.mu.Unlock()
+	r.lrmap.mu.Lock()
+	defer r.lrmap.mu.Unlock()
 
-	delete(r.lrm.readHandlers, r)
+	delete(r.lrmap.readHandlers, r)
 }
 
 func (r *readHandlerInner[K, V]) entered() bool {

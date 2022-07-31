@@ -2,6 +2,10 @@
 
 This is experimental code for educational purpose.  Do not use in production.
 
+Seriously, DO NOT USE THIS CODE anywhere near production or even at all!  How
+concurrency characteristics of this code relate to the memory model is not
+clear.
+
 Inspired by Jon Gjengset's [left-right](https://github.com/jonhoo/left-right).
 
 While trying to learn Rust I've watched [Jon's stream](https://www.youtube.com/watch?v=eLNAMEoKAAc)
@@ -16,12 +20,6 @@ Apparently there is prior work by Pedro Ramalhete and Andreia Correia (2013):
 Oblivious Reads" [blog post](https://concurrencyfreaks.blogspot.com/2013/12/left-right-concurrency-control.html),
 [preprint paper (pdf)](https://iweb.dl.sourceforge.net/project/ccfreaks/papers/LeftRight/leftright-extended.pdf)
 (Warning: Sourceforge).
-
-## Go type parameters draft, a.k.a. Go2Go
-
-In branch go2go is a modifiaction that uses the experimental go2go compiler.
-To test the code run compile the Go sources from the `dev.go2go` branch and run
-`go tool go2go test`.
 
 ## What is Left-Right?
 
