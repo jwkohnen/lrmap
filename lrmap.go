@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 )
 
 type (
@@ -14,8 +13,8 @@ type (
 		mu              sync.Mutex
 		left            arena[K, V]
 		right           arena[K, V]
-		readMap         unsafe.Pointer
-		writeMap        *arena[K, V]
+		readMap         atomic.Pointer[arena[K, V]]
+		writeMap        atomic.Pointer[arena[K, V]]
 		redoLog         []operation[K, V]
 		readHandlers    map[*readHandlerInner[K, V]]struct{}
 		readHandlerPool sync.Pool
@@ -43,7 +42,7 @@ func (m *LRMap[K, V]) Set(key K, value V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	(*(m.writeMap))[key] = value
+	(*m.writeMap.Load())[key] = value
 
 	m.redoLog = append(m.redoLog, operation[K, V]{typ: opSet, key: key, value: &value})
 }
@@ -52,7 +51,7 @@ func (m *LRMap[K, V]) Delete(key K) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(*(m.writeMap), key)
+	delete(*(m.writeMap.Load()), key)
 
 	// nolint:exhaustivestruct
 	m.redoLog = append(m.redoLog, operation[K, V]{typ: opDelete, key: key})
@@ -68,7 +67,7 @@ func (m *LRMap[K, V]) GetOK(key K) (V, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	value, ok := (*m.writeMap)[key]
+	value, ok := (*m.writeMap.Load())[key]
 
 	return value, ok
 }
@@ -85,9 +84,9 @@ func (m *LRMap[K, V]) Commit() {
 	for _, op := range m.redoLog {
 		switch op.typ {
 		case opSet:
-			(*(m.writeMap))[op.key] = *(op.value)
+			(*(m.writeMap.Load()))[op.key] = *(op.value)
 		case opDelete:
-			delete(*(m.writeMap), op.key)
+			delete(*(m.writeMap.Load()), op.key)
 		default:
 			// nolint:goerr113
 			panic(fmt.Errorf("operation(%d) not implemented", op.typ))
@@ -135,25 +134,17 @@ func (m *LRMap[K, V]) newReadHandler() *ReadHandler[K, V] {
 }
 
 func (m *LRMap[K, V]) swap() {
-	var (
-		read  = (*arena[K, V])(m.readMap)
-		write *arena[K, V]
-	)
-
-	switch read {
+	switch m.readMap.Load() {
 	case nil /* initial case */, &(m.left):
-		read = &(m.right)
-		write = &(m.left)
+		m.readMap.Store(&(m.right))
+		m.writeMap.Store(&(m.left))
 	case &(m.right):
-		read = &(m.left)
-		write = &(m.right)
+		m.readMap.Store(&(m.left))
+		m.writeMap.Store(&(m.right))
 	default:
 		// nolint:goerr113
-		panic(fmt.Errorf("illegal pointer: %v", read))
+		panic(fmt.Errorf("illegal pointer: %v", m.readMap.Load()))
 	}
-
-	atomic.StorePointer(&(m.readMap), unsafe.Pointer(read))
-	m.writeMap = write
 }
 
 func (m *LRMap[K, V]) waitForReaders() {
@@ -187,10 +178,6 @@ func (m *LRMap[K, V]) waitForReaders() {
 			delay = maxDelay
 		}
 	}
-}
-
-func (m *LRMap[K, V]) getArenaAtomic() arena[K, V] {
-	return *(*arena[K, V])(atomic.LoadPointer(&(m.readMap)))
 }
 
 type opType int8
@@ -275,7 +262,7 @@ func (r *readHandlerInner[K, V]) enter() {
 	}
 
 	atomic.AddUint64(&r.epoch, 1)
-	r.live = r.lrmap.getArenaAtomic()
+	r.live = *r.lrmap.readMap.Load()
 }
 
 func (r *readHandlerInner[K, V]) leave() {
